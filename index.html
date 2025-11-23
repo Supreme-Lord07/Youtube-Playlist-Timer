@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Time Machine</title>
+    
+    <!-- Tailwind CSS (No installation needed) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Fonts: Roboto Mono (MonkeyType style) -->
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <!-- Theme Logic Configuration -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"Roboto Mono"', 'monospace'],
+                        sans: ['"Inter"', 'sans-serif'],
+                    },
+                    colors: {
+                        bg: 'var(--bg-color)',
+                        main: 'var(--main-color)',
+                        caret: 'var(--caret-color)',
+                        sub: 'var(--sub-color)',
+                        text: 'var(--text-color)',
+                        error: 'var(--error-color)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            /* Default to Serika Dark */
+            --bg-color: #323437;
+            --main-color: #e2b714;
+            --caret-color: #e2b714;
+            --sub-color: #646669;
+            --text-color: #d1d0c5;
+            --error-color: #ca4754;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        .theme-btn {
+            transition: all 0.2s;
+        }
+        .theme-btn:hover {
+            color: var(--text-color);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-color); }
+        ::-webkit-scrollbar-thumb { background: var(--sub-color); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--main-color); }
+
+        .glass-panel {
+            background: rgba(0,0,0,0.1);
+            backdrop-filter: blur(5px);
+            border: 1px solid var(--sub-color);
+        }
+        
+        /* Loader Animation */
+        .loader {
+            border: 3px solid var(--sub-color);
+            border-top: 3px solid var(--main-color);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="min-h-screen font-mono flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="w-full max-w-5xl mx-auto p-6 flex justify-between items-center z-10">
+        <div class="flex items-center gap-3 select-none">
+            <i class="fa-brands fa-youtube text-3xl text-main"></i>
+            <h1 class="text-xl font-bold text-text hidden sm:block">yt_duration</h1>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <!-- Theme Dropdown Trigger -->
+            <button onclick="toggleThemeModal()" class="text-sub hover:text-main transition-colors text-sm flex items-center gap-2">
+                <i class="fa-solid fa-palette"></i> <span id="current-theme-name">Serika Dark</span>
+            </button>
+
+            <!-- API Settings Trigger -->
+            <button onclick="toggleSettingsModal()" class="text-sub hover:text-text transition-colors text-sm">
+                <i class="fa-solid fa-gear"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-1 w-full max-w-4xl mx-auto px-4 flex flex-col items-center justify-center -mt-10">
+        
+        <!-- Hero Input -->
+        <div class="w-full max-w-2xl text-center mb-10">
+            <div class="relative group w-full">
+                <i class="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-sub text-lg"></i>
+                <input 
+                    type="text" 
+                    id="urlInput"
+                    placeholder="paste video or playlist url..." 
+                    class="w-full bg-transparent border-b-2 border-sub text-text text-xl py-3 pl-12 pr-4 focus:outline-none focus:border-main transition-all placeholder:text-sub font-mono"
+                >
+            </div>
+            
+            <div class="flex justify-center gap-4 mt-8">
+                <button onclick="calculate()" id="calcBtn" class="bg-transparent text-sub hover:text-main border border-sub hover:border-main px-8 py-2 rounded font-bold transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-calculator"></i> Calculate
+                </button>
+                <button onclick="loadDemo()" class="text-sub hover:text-text text-sm underline decoration-dotted underline-offset-4">
+                    Demo Data
+                </button>
+            </div>
+
+            <p id="errorMsg" class="text-error mt-4 hidden text-sm font-bold"></p>
+        </div>
+
+        <!-- Results Container (Hidden by default) -->
+        <div id="resultsArea" class="w-full hidden animate-[fadeIn_0.5s_ease-out]">
+            
+            <!-- Info Header -->
+            <div class="flex flex-col md:flex-row justify-between items-end border-b border-sub pb-4 mb-8">
+                <div>
+                    <span id="resType" class="text-xs font-bold text-bg bg-main px-2 py-0.5 rounded uppercase mb-2 inline-block">Playlist</span>
+                    <h2 id="resTitle" class="text-2xl font-bold text-text truncate max-w-lg">My Playlist Title</h2>
+                </div>
+                <div class="flex gap-6 text-sub text-sm mt-4 md:mt-0">
+                    <div><i class="fa-solid fa-film"></i> <span id="resCount">0</span> videos</div>
+                    <div><i class="fa-solid fa-clock"></i> <span id="resAvg">00:00</span> avg</div>
+                </div>
+            </div>
+
+            <!-- Cards Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- 1x Card (Main) -->
+                <div class="sm:col-span-2 lg:col-span-1 bg-main text-bg p-6 rounded relative overflow-hidden group">
+                    <div class="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                        <i class="fa-solid fa-play text-6xl"></i>
+                    </div>
+                    <div class="text-lg font-bold mb-1">1.0x <span class="text-xs opacity-75">Normal</span></div>
+                    <div id="time1x" class="text-4xl font-bold tracking-tight">00:00:00</div>
+                    <div id="fullTime1x" class="text-sm opacity-80 mt-1">0h 0m 0s</div>
+                </div>
+
+                <!-- Generated via JS -->
+                <div id="speedCards" class="contents"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full text-center p-6 text-sub text-xs">
+        <p>press <span class="bg-sub/20 px-1 rounded text-text">enter</span> to calculate</p>
+    </footer>
+
+    <!-- Theme Modal -->
+    <div id="themeModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 backdrop-blur-sm" onclick="if(event.target === this) toggleThemeModal()">
+        <div class="bg-bg border border-sub w-full max-w-2xl max-h-[80vh] flex flex-col rounded-lg shadow-2xl">
+            <div class="p-4 border-b border-sub flex justify-between items-center">
+                <h3 class="text-text font-bold"><i class="fa-solid fa-palette"></i> Select Theme</h3>
+                <button onclick="toggleThemeModal()" class="text-sub hover:text-error"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-4 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 gap-2" id="themeGrid">
+                <!-- Themes injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 backdrop-blur-sm" onclick="if(event.target === this) toggleSettingsModal()">
+        <div class="bg-bg border border-sub w-full max-w-md p-6 rounded-lg shadow-2xl">
+            <h3 class="text-text font-bold text-xl mb-4">Settings</h3>
+            
+            <label class="block text-sub text-sm mb-2">YouTube Data API Key</label>
+            <input type="password" id="apiKeyInput" class="w-full bg-sub/10 border border-sub text-text p-2 rounded focus:border-main outline-none mb-2 font-mono">
+            <p class="text-xs text-sub mb-6">Required for fetching real data. Stored locally in your browser.</p>
+            
+            <button onclick="saveSettings()" class="w-full bg-main text-bg font-bold py-2 rounded hover:opacity-90 transition-opacity">Save</button>
+            
+            <div class="mt-4 pt-4 border-t border-sub/30">
+                <a href="https://console.cloud.google.com/" target="_blank" class="text-xs text-main hover:underline">Get an API Key &rarr;</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // --- DATA & THEMES ---
+        const themes = [
+            { name: "Serika Dark", bg: "#323437", main: "#e2b714", sub: "#646669", text: "#d1d0c5" },
+            { name: "Serika Light", bg: "#e1e1e3", main: "#e2b714", sub: "#646669", text: "#323437" },
+            { name: "Carbon", bg: "#313131", main: "#f66e0d", sub: "#616161", text: "#f5e6c8" },
+            { name: "Dracula", bg: "#282a36", main: "#bd93f9", sub: "#6272a4", text: "#f8f8f2" },
+            { name: "8008", bg: "#333a45", main: "#f44c7f", sub: "#939eae", text: "#e9ecf0" },
+            { name: "9009", bg: "#eeebe2", main: "#99c794", sub: "#999999", text: "#080808" },
+            { name: "Joker", bg: "#1a0e25", main: "#99de1e", sub: "#7554a3", text: "#e9e2f5" },
+            { name: "Miami", bg: "#f35588", main: "#05dfd7", sub: "#a32a55", text: "#ffffff" },
+            { name: "Miami Nights", bg: "#18181a", main: "#e4609b", sub: "#47bac0", text: "#fff" },
+            { name: "Gruvbox Dark", bg: "#282828", main: "#fabd2f", sub: "#928374", text: "#ebdbb2" },
+            { name: "Gruvbox Light", bg: "#fbf1c7", main: "#b57614", sub: "#928374", text: "#3c3836" },
+            { name: "Arch", bg: "#0c0d11", main: "#7ebae4", sub: "#454864", text: "#f6f9fc" },
+            { name: "Aether", bg: "#101820", main: "#eedc82", sub: "#cf6766", text: "#eae1d0" },
+            { name: "Bento", bg: "#2d394d", main: "#ff7a90", sub: "#4a768d", text: "#fffaf8" },
+            { name: "Botanical", bg: "#7b9c98", main: "#eaf1f3", sub: "#495e68", text: "#eaf1f3" },
+            { name: "Camping", bg: "#faf1e4", main: "#618c56", sub: "#c2b8aa", text: "#3c403b" },
+            { name: "Cyberpunk", bg: "#000b1e", main: "#0ea5e9", sub: "#f43f5e", text: "#e2e8f0" },
+            { name: "Dark Magic", bg: "#091f2c", main: "#a286b8", sub: "#5e81ac", text: "#93a1a1" },
+            { name: "Hammerhead", bg: "#1e222a", main: "#4fcdb9", sub: "#5e6987", text: "#e2e4e8" },
+            { name: "Honey", bg: "#f2aa00", main: "#fff5d6", sub: "#a67c00", text: "#4c3b00" },
+            { name: "Iceberg", bg: "#161821", main: "#84a0c6", sub: "#6b7089", text: "#c6c8d1" },
+            { name: "Lavender", bg: "#ada6c2", main: "#e4e3e9", sub: "#5b566c", text: "#2f2a3c" },
+            { name: "Matrix", bg: "#000000", main: "#00ff00", sub: "#003300", text: "#ccffcc" },
+            { name: "Mint", bg: "#05385b", main: "#5cdb95", sub: "#379683", text: "#edf5e1" },
+            { name: "Nord", bg: "#2e3440", main: "#88c0d0", sub: "#4c566a", text: "#d8dee9" },
+            { name: "Olive", bg: "#e9e5cc", main: "#92946f", sub: "#b0b0b0", text: "#373737" },
+            { name: "Paper", bg: "#eeeeee", main: "#444444", sub: "#b4b4b4", text: "#444444" },
+            { name: "Red Dragon", bg: "#1a0b0c", main: "#ff3a32", sub: "#e2b714", text: "#ffffff" },
+            { name: "Retro", bg: "#dad3c1", main: "#ac7868", sub: "#968c83", text: "#4a4641" },
+            { name: "Stealth", bg: "#010203", main: "#383e42", sub: "#5e676e", text: "#b2bec3" },
+            { name: "Terminal", bg: "#191919", main: "#79a617", sub: "#484949", text: "#e8e9e9" },
+            { name: "Vaporwave", bg: "#180f28", main: "#f06fff", sub: "#493b8a", text: "#2cffff" },
+        ];
+
+        // --- APP STATE ---
+        let apiKey = localStorage.getItem('yt_api_key') || '';
+        let currentTheme = JSON.parse(localStorage.getItem('yt_theme')) || themes[0];
+
+        // --- DOM ELEMENTS ---
+        const urlInput = document.getElementById('urlInput');
+        const calcBtn = document.getElementById('calcBtn');
+        const errorMsg = document.getElementById('errorMsg');
+        const resultsArea = document.getElementById('resultsArea');
+        const themeModal = document.getElementById('themeModal');
+        const settingsModal = document.getElementById('settingsModal');
+        const themeGrid = document.getElementById('themeGrid');
+
+        // --- INIT ---
+        window.onload = () => {
+            applyTheme(currentTheme);
+            renderThemeGrid();
+            if(apiKey) document.getElementById('apiKeyInput').value = apiKey;
+            
+            // Enter key listener
+            urlInput.addEventListener('keypress', (e) => {
+                if(e.key === 'Enter') calculate();
+            });
+        };
+
+        // --- THEME ENGINE ---
+        function applyTheme(theme) {
+            const root = document.documentElement;
+            root.style.setProperty('--bg-color', theme.bg);
+            root.style.setProperty('--main-color', theme.main);
+            root.style.setProperty('--sub-color', theme.sub);
+            root.style.setProperty('--text-color', theme.text);
+            
+            // Estimate a contrasting error color or just stick to red
+            root.style.setProperty('--error-color', '#ff4444');
+
+            document.getElementById('current-theme-name').textContent = theme.name;
+            currentTheme = theme;
+            localStorage.setItem('yt_theme', JSON.stringify(theme));
+        }
+
+        function renderThemeGrid() {
+            themeGrid.innerHTML = themes.map(t => `
+                <div onclick='applyTheme(${JSON.stringify(t)}); toggleThemeModal()' 
+                     class="cursor-pointer p-2 rounded border border-transparent hover:border-sub flex items-center gap-3 transition-colors group">
+                    <div class="flex gap-1">
+                        <div class="w-4 h-4 rounded-full" style="background:${t.bg}; border:1px solid #777"></div>
+                        <div class="w-4 h-4 rounded-full" style="background:${t.main}"></div>
+                        <div class="w-4 h-4 rounded-full" style="background:${t.text}"></div>
+                    </div>
+                    <span class="text-xs text-text font-bold group-hover:text-main">${t.name}</span>
+                </div>
+            `).join('');
+        }
+
+        function toggleThemeModal() {
+            themeModal.classList.toggle('hidden');
+            themeModal.classList.toggle('flex');
+        }
+
+        // --- SETTINGS ---
+        function toggleSettingsModal() {
+            settingsModal.classList.toggle('hidden');
+            settingsModal.classList.toggle('flex');
+        }
+
+        function saveSettings() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            apiKey = key;
+            localStorage.setItem('yt_api_key', key);
+            toggleSettingsModal();
+        }
+
+        // --- UTILS ---
+        function parseDuration(duration) {
+            const match = duration.match(/PT(\d+H)?(\d+M)?(\d+S)?/);
+            if (!match) return 0;
+            const hours = (parseInt(match[1]) || 0);
+            const minutes = (parseInt(match[2]) || 0);
+            const seconds = (parseInt(match[3]) || 0);
+            return (hours * 3600) + (minutes * 60) + seconds;
+        }
+
+        function fmtClock(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            const pad = (n) => n.toString().padStart(2, '0');
+            return `${h > 0 ? pad(h) + ':' : ''}${pad(m)}:${pad(s)}`;
+        }
+
+        function fmtFull(seconds) {
+            const h = Math.floor(seconds / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            const s = Math.floor(seconds % 60);
+            if (h > 0) return `${h}h ${m}m ${s}s`;
+            return `${m}m ${s}s`;
+        }
+
+        // --- CORE LOGIC ---
+        function loadDemo() {
+            renderResults({
+                totalSeconds: 12450,
+                videoCount: 42,
+                averageSeconds: 296,
+                title: "Demo Playlist: Coding Ambient Music",
+                type: 'playlist'
+            });
+            urlInput.value = "";
+        }
+
+        async function calculate() {
+            const url = urlInput.value.trim();
+            if (!url) return;
+
+            // Basic Validation
+            if (!apiKey) {
+                showError("Please set your API Key in settings first.");
+                toggleSettingsModal();
+                return;
+            }
+
+            // Extract ID
+            let id = null;
+            let type = 'video';
+            const plMatch = url.match(/[?&]list=([^#\&\?]+)/);
+            const vidMatch = url.match(/(?:v=|\/)([0-9A-Za-z_-]{11}).*/);
+
+            if (plMatch) {
+                id = plMatch[1];
+                type = 'playlist';
+            } else if (vidMatch) {
+                id = vidMatch[1];
+            } else {
+                showError("Invalid YouTube URL");
+                return;
+            }
+
+            setLoading(true);
+            showError(null);
+
+            try {
+                let totalDuration = 0;
+                let count = 0;
+                let title = "";
+
+                if (type === 'video') {
+                    const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${id}&key=${apiKey}`);
+                    const data = await res.json();
+                    if (!data.items?.length) throw new Error("Video not found");
+                    
+                    totalDuration = parseDuration(data.items[0].contentDetails.duration);
+                    title = data.items[0].snippet.title;
+                    count = 1;
+                } else {
+                    // Playlist logic
+                    const plRes = await fetch(`https://www.googleapis.com/youtube/v3/playlists?part=snippet&id=${id}&key=${apiKey}`);
+                    const plData = await plRes.json();
+                    if (plData.items?.length) title = plData.items[0].snippet.title;
+
+                    let nextToken = '';
+                    let videoIds = [];
+
+                    do {
+                        const itemsRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${id}&maxResults=50&pageToken=${nextToken}&key=${apiKey}`);
+                        const itemsData = await itemsRes.json();
+                        if (itemsData.error) throw new Error(itemsData.error.message);
+
+                        videoIds.push(...itemsData.items.map(i => i.contentDetails.videoId));
+                        nextToken = itemsData.nextPageToken;
+                    } while (nextToken && videoIds.length < 500);
+
+                    // Fetch details in chunks of 50
+                    for (let i = 0; i < videoIds.length; i += 50) {
+                        const chunk = videoIds.slice(i, i + 50).join(',');
+                        const vRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails&id=${chunk}&key=${apiKey}`);
+                        const vData = await vRes.json();
+                        if (vData.items) {
+                            vData.items.forEach(item => totalDuration += parseDuration(item.contentDetails.duration));
+                        }
+                    }
+                    count = videoIds.length;
+                }
+
+                renderResults({
+                    totalSeconds: totalDuration,
+                    videoCount: count,
+                    averageSeconds: count > 0 ? totalDuration / count : 0,
+                    title: title || "Unknown Title",
+                    type: type
+                });
+
+            } catch (err) {
+                showError(err.message || "Failed to fetch data");
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        // --- UI UPDATERS ---
+        function setLoading(isLoading) {
+            if (isLoading) {
+                calcBtn.innerHTML = '<div class="loader"></div> Processing...';
+                calcBtn.disabled = true;
+                resultsArea.classList.add('hidden');
+            } else {
+                calcBtn.innerHTML = '<i class="fa-solid fa-calculator"></i> Calculate';
+                calcBtn.disabled = false;
+            }
+        }
+
+        function showError(msg) {
+            if (!msg) {
+                errorMsg.classList.add('hidden');
+                urlInput.classList.remove('border-error');
+                return;
+            }
+            errorMsg.textContent = msg;
+            errorMsg.classList.remove('hidden');
+            urlInput.classList.add('border-error');
+        }
+
+        function renderResults(data) {
+            resultsArea.classList.remove('hidden');
+            
+            document.getElementById('resType').textContent = data.type;
+            document.getElementById('resTitle').textContent = data.title;
+            document.getElementById('resCount').textContent = data.videoCount;
+            document.getElementById('resAvg').textContent = fmtFull(data.averageSeconds);
+            
+            // Render 1x
+            document.getElementById('time1x').textContent = fmtClock(data.totalSeconds);
+            document.getElementById('fullTime1x').textContent = fmtFull(data.totalSeconds);
+
+            // Render other speeds
+            const speeds = [1.25, 1.5, 1.75, 2.0, 2.5, 3.0];
+            const container = document.getElementById('speedCards');
+            
+            container.innerHTML = speeds.map(speed => {
+                const adjSec = data.totalSeconds / speed;
+                const saved = data.totalSeconds - adjSec;
+                return `
+                    <div class="bg-sub/10 border border-sub p-6 rounded relative hover:border-main transition-colors">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xl font-bold text-main">${speed}x</span>
+                            <span class="text-xs bg-main/20 text-main px-2 py-1 rounded">Save ${fmtClock(saved)}</span>
+                        </div>
+                        <div class="text-3xl font-bold text-text">${fmtClock(adjSec)}</div>
+                        <div class="text-sm text-sub mt-1">${fmtFull(adjSec)}</div>
+                    </div>
+                `;
+            }).join('');
+        }
+    </script>
+</body>
+</html>
